@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Field Log — Ticket Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sidebar-bg: #1B1B20;
+    --sidebar-icon: #93939E;
+    --sidebar-active-bg: #E9E5FB;
+    --sidebar-active-fg: #4B3F91;
+    --topbar-bg: #FFFFFF;
+    --page-bg: #F4F4F6;
+    --card-bg: #FFFFFF;
+    --line: #E6E6EA;
+    --text: #24242B;
+    --text-soft: #74747E;
+    --link-blue: #2F6FE4;
+    --primary: #443C8C;
+    --primary-hover: #362F70;
+    --outline-blue: #2F6FE4;
+    --status-open: #2F6FE4;
+    --status-progress: #6A4FC7;
+    --status-resolved: #1F9254;
+    --status-escalated: #D1483A;
+    --search-bg: #F0F0F3;
+    --shadow: 0 1px 2px rgba(20,20,30,0.05);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--page-bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 64px; background: var(--sidebar-bg); flex-shrink: 0;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px 0; gap: 6px;
+  }
+  .sidebar .logo {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: linear-gradient(155deg, var(--primary), #241F52);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 12px; margin-bottom: 18px;
+  }
+  .sidebar button {
+    width: 42px; height: 42px; border: none; background: transparent;
+    border-radius: 9px; color: var(--sidebar-icon); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s, color .15s;
+  }
+  .sidebar button svg { width: 20px; height: 20px; }
+  .sidebar button:hover { background: rgba(255,255,255,0.06); color: #fff; }
+  .sidebar button.active { background: var(--sidebar-active-bg); color: var(--sidebar-active-fg); }
+
+  /* Main */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+  .topbar {
+    background: var(--topbar-bg); border-bottom: 1px solid var(--line);
+    padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+    gap: 16px;
+  }
+  .topbar .title-pill {
+    background: var(--search-bg); border-radius: 8px; padding: 9px 16px;
+    font-size: 13.5px; color: var(--text-soft); font-weight: 500;
+  }
+  .topbar .title-pill b { color: var(--text); font-weight: 600; }
+  .sync {
+    font-size: 12px; color: var(--text-soft); display: flex; align-items: center; gap: 6px;
+  }
+  .sync .dot { width: 7px; height: 7px; border-radius: 50%; background: #1F9254; }
+  .sync.saving .dot { background: #D1A63A; }
+  .sync.error .dot { background: var(--status-escalated); }
+
+  .content { padding: 24px 28px 60px; max-width: 980px; width: 100%; }
+
+  h1.page-title { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
+  p.page-sub { font-size: 13px; color: var(--text-soft); margin: 0 0 22px; }
+
+  .card {
+    background: var(--card-bg); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 22px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 14.5px; font-weight: 600; margin: 0 0 4px; }
+  .card .sub { font-size: 12.5px; color: var(--text-soft); margin: 0 0 18px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-soft); margin-bottom: 6px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px) { .row2 { grid-template-columns: 1fr; } }
+
+  input, select, textarea {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--line);
+    border-radius: 7px; background: #fff; color: var(--text);
+    font-family: inherit; font-size: 13.5px; transition: border-color .15s;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); }
+  textarea { resize: vertical; min-height: 60px; }
+  .mono { font-family: 'Inter', monospace; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--primary); color: #fff; border: none;
+    padding: 10px 18px; border-radius: 8px; font-family: inherit;
+    font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background .15s;
+  }
+  .btn:hover { background: var(--primary-hover); }
+  .btn.outline {
+    background: #fff; color: var(--outline-blue); border: 1px solid var(--outline-blue);
+  }
+  .btn.outline:hover { background: #F3F7FE; }
+  .btn:disabled { opacity: .55; cursor: default; }
+
+  /* Dashboard */
+  .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 18px; }
+  @media (max-width: 620px) { .stats { grid-template-columns: repeat(2,1fr); } }
+  .stat { background: var(--card-bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px; box-shadow: var(--shadow); }
+  .stat .num { font-size: 22px; font-weight: 700; }
+  .stat .lbl { font-size: 11.5px; color: var(--text-soft); margin-top: 2px; }
+
+  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .toolbar input, .toolbar select { flex: 1; min-width: 160px; }
+
+  table.data { width: 100%; border-collapse: collapse; background: var(--card-bg); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
+  table.data thead th {
+    text-align: left; font-size: 11.5px; font-weight: 600; color: var(--text-soft);
+    padding: 11px 14px; background: #FAFAFB; border-bottom: 1px solid var(--line);
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  table.data thead th:hover { color: var(--text); }
+  table.data thead th .arrow { font-size: 10px; margin-left: 3px; opacity: .5; }
+  table.data tbody tr { cursor: pointer; border-bottom: 1px solid var(--line); }
+  table.data tbody tr:last-child { border-bottom: none; }
+  table.data tbody tr:hover { background: #FAFAFB; }
+  table.data td { padding: 11px 14px; font-size: 13px; vertical-align: top; }
+  td.site-cell { color: var(--link-blue); font-weight: 500; }
+  td.status-cell { font-weight: 600; }
+  .st-Open { color: var(--status-open); }
+  .st-InProgress, .st-In.Progress { color: var(--status-progress); }
+  .st-Resolved { color: var(--status-resolved); }
+  .st-Escalated { color: var(--status-escalated); }
+
+  .detail-row td { background: #FAFAFB; padding: 0; }
+  .detail-inner { padding: 16px 18px; }
+  .update-item { padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .update-item:last-child { border-bottom: none; }
+  .update-item .u-date { font-weight: 700; font-size: 11.5px; color: var(--primary); }
+  .update-item p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; }
+  .update-item .u-meta { font-size: 11.5px; color: var(--text-soft); margin-top: 3px; }
+  .attach-tag { display: inline-block; margin-top: 5px; padding: 2px 8px; border-radius: 5px; background: #EEEAFB; color: var(--status-progress); font-size: 11px; }
+  .attach-tag a { color: inherit; text-decoration: underline; }
+
+  .empty { text-align: center; padding: 36px 16px; color: var(--text-soft); font-size: 13px; }
+
+  .toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--text); color: #fff; padding: 10px 18px; border-radius: 8px;
+    font-size: 13px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .setup-banner {
+    background: #FBEAE8; border: 1px solid #F3CFC9; color: #8A3323;
+    border-radius: 8px; padding: 14px 16px; font-size: 13px; margin-bottom: 18px; line-height: 1.5;
+  }
+  .setup-banner code { background: #fff; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .hint { font-size: 11.5px; color: var(--text-soft); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo">FL</div>
+  <button class="active" data-tab="new" title="New Ticket">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <button data-tab="update" title="Log Update">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+  </button>
+  <button data-tab="dash" title="Dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+  </button>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div class="title-pill"><b>Field Log</b> — Ticket &amp; site visit record</div>
+    <div class="sync" id="sync"><span class="dot"></span><span id="sync-text">Ready</span></div>
+  </div>
+
+  <div class="content">
+    <div id="setup-banner" class="setup-banner" style="display:none;">
+      Backend not connected yet. Deploy <code>Code.gs</code> as an Apps Script Web App and paste the
+      <code>/exec</code> URL into <code>APPS_SCRIPT_URL</code> near the top of this file's script.
+    </div>
+
+    <!-- NEW TICKET -->
+    <section class="panel" id="panel-new">
+      <h1 class="page-title">New ticket</h1>
+      <p class="page-sub">Every escalated or self-identified issue starts here.</p>
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label>Odoo ticket number</label><input type="text" id="n-odoo" class="mono" placeholder="e.g. ODO-48213"></div>
+          <div class="field"><label>Date opened</label><input type="date" id="n-date"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Ticket source</label><input type="text" id="n-source" placeholder="e.g. escalated by Rohit"></div>
+          <div class="field"><label>Site / client name</label><input type="text" id="n-site" placeholder="e.g. MMTC-PAMP"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Issue category</label>
+            <select id="n-category">
+              <option>Access Control</option><option>Biometric</option><option>SQL Server</option>
+              <option>IIS / Web App</option><option>Network</option><option>Other</option>
+            </select>
+          </div>
+          <div class="field"><label>Priority</label>
+            <select id="n-priority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select>
+          </div>
+        </div>
+        <div class="field"><label>Short description</label><textarea id="n-desc" placeholder="What's the issue?"></textarea></div>
+        <div class="field"><label>Status</label>
+          <select id="n-status"><option>Open</option><option>In Progress</option><option>Resolved</option><option>Escalated</option></select>
+        </div>
+        <button class="btn" id="n-save" onclick="createTicket()">Save ticket</button>
+      </div>
+    </section>
+
+    <!-- LOG UPDATE -->
+    <section class="panel" id="panel-update" style="display:none;">
+      <h1 class="page-title">Log a daily update</h1>
+      <p class="page-sub">For multi-day tickets — one entry per visit or per day's work.</p>
+      <div class="card">
+        <div class="field"><label>Select ticket</label>
+          <select id="u-ticket" onchange="renderSelectedTicketHint()"></select>
+          <div class="hint" id="u-hint"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Update date</label><input type="date" id="u-date"></div>
+          <div class="field"><label>Time spent (hrs)</label><input type="number" id="u-time" step="0.5" min="0" placeholder="e.g. 3"></div>
+        </div>
+        <div class="field"><label>What was done</label><textarea id="u-desc" placeholder="Diagnosis, actions, site visit notes..."></textarea></div>
+
+        <div class="card" style="background:#FAFAFB; padding: 16px; margin-bottom: 14px;">
+          <h2>Patch / EXE / bug file (optional)</h2>
+          <p class="sub">Small files upload straight to your Drive. For large installers, paste an existing Drive link instead.</p>
+          <div class="row2">
+            <div class="field"><label>Attachment type</label>
+              <select id="u-atype"><option value="">None</option><option>Patch</option><option>EXE</option><option>Config file</option><option>Bug report</option><option>Log file</option><option>Screenshot</option></select>
+            </div>
+            <div class="field"><label>Upload file (&lt;10MB)</label><input type="file" id="u-file"></div>
+          </div>
+          <div class="field"><label>...or paste Drive link</label><input type="text" id="u-drivelink" placeholder="https://drive.google.com/..."></div>
+          <div class="field" style="margin-bottom:0;"><label>Attachment note</label><input type="text" id="u-anote" placeholder="What it fixes / why it was applied"></div>
+        </div>
+
+        <div class="field"><label>Status after this update</label>
+          <select id="u-status"><option>Open</option><option>In Progress</option><option>Resolved</option><option>Escalated</option></select>
+        </div>
+        <div class="field"><label>Next step / follow-up</label><input type="text" id="u-next" placeholder="Leave blank if none"></div>
+        <button class="btn" id="u-save" onclick="addUpdate()">Save update</button>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section class="panel" id="panel-dash" style="display:none;">
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-sub">Your full ticket record — click a row to expand its timeline.</p>
+
+      <div class="stats">
+        <div class="stat"><div class="num" id="s-open">0</div><div class="lbl">Open</div></div>
+        <div class="stat"><div class="num" id="s-progress">0</div><div class="lbl">In progress</div></div>
+        <div class="stat"><div class="num" id="s-resolved">0</div><div class="lbl">Resolved (30d)</div></div>
+        <div class="stat"><div class="num" id="s-avg">—</div><div class="lbl">Avg days to close</div></div>
+      </div>
+
+      <div class="toolbar">
+        <input type="text" id="f-search" placeholder="Search site, ticket ID, Odoo #, description..." oninput="renderDash()">
+        <select id="f-status" onchange="renderDash()">
+          <option value="">All statuses</option><option>Open</option><option>In Progress</option><option>Resolved</option><option>Escalated</option>
+        </select>
+      </div>
+
+      <table class="data">
+        <thead>
+          <tr>
+            <th onclick="setSort('id')">Ticket <span class="arrow" id="ar-id"></span></th>
+            <th onclick="setSort('odoo')">Odoo # <span class="arrow" id="ar-odoo"></span></th>
+            <th onclick="setSort('site')">Site <span class="arrow" id="ar-site"></span></th>
+            <th onclick="setSort('category')">Category <span class="arrow" id="ar-category"></span></th>
+            <th onclick="setSort('priority')">Priority <span class="arrow" id="ar-priority"></span></th>
+            <th onclick="setSort('dateOpened')">Opened <span class="arrow" id="ar-dateOpened"></span></th>
+            <th onclick="setSort('status')">Status <span class="arrow" id="ar-status"></span></th>
+          </tr>
+        </thead>
+        <tbody id="ticket-tbody"></tbody>
+      </table>
+      <div id="empty-state"></div>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  /* ====== CONFIGURE THIS ====== */
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbysfctuKwBwdqlbztfK7EwE6f8Y1yM2Icq4O4799fAyepuDdzlYKxm8jhU5f0npNG1Z4Q/exec';
+  /* ============================= */
+
+  const CACHE_KEY = 'field_log_cache_v1';
+  let tickets = [];
+  let sortKey = 'dateOpened', sortDir = -1;
+  let expandedId = null;
+
+  function todayStr() { return new Date().toISOString().slice(0,10); }
+
+  function setSync(state, text) {
+    const el = document.getElementById('sync');
+    el.className = 'sync' + (state ? ' ' + state : '');
+    document.getElementById('sync-text').textContent = text;
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  function checkConfigured() {
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_YOUR') === 0) {
+      document.getElementById('setup-banner').style.display = 'block';
+      setSync('error', 'Not connected');
+      // fall back to any local cache so the UI isn't empty
+      try { tickets = JSON.parse(localStorage.getItem(CACHE_KEY)) || []; } catch(e) { tickets = []; }
+      renderDash(); populateTicketSelect();
+      return false;
+    }
+    return true;
+  }
+
+  async function loadTickets() {
+    if (!checkConfigured()) return;
+    setSync('saving', 'Syncing...');
+    try {
+      const res = await fetch(APPS_SCRIPT_URL + '?action=list');
+      const data = await res.json();
+      tickets = data.tickets || [];
+      localStorage.setItem(CACHE_KEY, JSON.stringify(tickets));
+      setSync('', 'Synced');
+    } catch (e) {
+      setSync('error', 'Offline — showing cache');
+      try { tickets = JSON.parse(localStorage.getItem(CACHE_KEY)) || []; } catch(e2) { tickets = []; }
+    }
+    renderDash();
+    populateTicketSelect();
+  }
+
+  // Tabs
+  document.querySelectorAll('.sidebar button[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.sidebar button[data-tab]').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+      btn.classList.add('active');
+      document.getElementById('panel-' + btn.dataset.tab).style.display = 'block';
+      if (btn.dataset.tab === 'update') populateTicketSelect();
+      if (btn.dataset.tab === 'dash') renderDash();
+    });
+  });
+
+  async function createTicket() {
+    if (!checkConfigured()) { showToast('Connect the backend first — see banner above'); return; }
+    const site = document.getElementById('n-site').value.trim();
+    const desc = document.getElementById('n-desc').value.trim();
+    if (!site || !desc) { showToast('Site and description are required'); return; }
+
+    const body = new URLSearchParams({
+      action: 'createTicket',
+      odoo: document.getElementById('n-odoo').value.trim(),
+      dateOpened: document.getElementById('n-date').value || todayStr(),
+      source: document.getElementById('n-source').value.trim(),
+      site, category: document.getElementById('n-category').value,
+      priority: document.getElementById('n-priority').value,
+      desc, status: document.getElementById('n-status').value
+    });
+
+    const btn = document.getElementById('n-save');
+    btn.disabled = true; setSync('saving', 'Saving...');
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body });
+      const data = await res.json();
+      showToast((data.id || 'Ticket') + ' saved');
+      ['n-odoo','n-source','n-site','n-desc'].forEach(f => document.getElementById(f).value = '');
+      document.getElementById('n-date').value = '';
+      document.getElementById('n-status').value = 'Open';
+      await loadTickets();
+    } catch (e) {
+      showToast('Save failed — check your connection');
+      setSync('error', 'Save failed');
+    }
+    btn.disabled = false;
+  }
+
+  function populateTicketSelect() {
+    const sel = document.getElementById('u-ticket');
+    sel.innerHTML = '';
+    if (!tickets.length) { sel.innerHTML = '<option value="">No tickets yet — create one first</option>'; return; }
+    tickets.slice().sort((a,b) => (a.id < b.id ? 1 : -1)).forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      const short = t.desc && t.desc.length > 40 ? t.desc.slice(0,40) + '…' : t.desc;
+      opt.textContent = t.id + ' — ' + t.site + ' — ' + short + ' [' + t.status + ']';
+      sel.appendChild(opt);
+    });
+    renderSelectedTicketHint();
+  }
+
+  function renderSelectedTicketHint() {
+    const sel = document.getElementById('u-ticket');
+    const t = tickets.find(x => x.id === sel.value);
+    document.getElementById('u-hint').textContent = t ? (t.updates.length + ' update(s) logged · opened ' + t.dateOpened) : '';
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function addUpdate() {
+    if (!checkConfigured()) { showToast('Connect the backend first — see banner above'); return; }
+    const tid = document.getElementById('u-ticket').value;
+    const t = tickets.find(x => x.id === tid);
+    if (!t) { showToast('Select a ticket first'); return; }
+    const desc = document.getElementById('u-desc').value.trim();
+    if (!desc) { showToast('Describe what was done'); return; }
+
+    const btn = document.getElementById('u-save');
+    btn.disabled = true; setSync('saving', 'Saving...');
+
+    const params = {
+      action: 'addUpdate', ticketId: tid, site: t.site,
+      date: document.getElementById('u-date').value || todayStr(),
+      time: document.getElementById('u-time').value,
+      desc, atype: document.getElementById('u-atype').value,
+      anote: document.getElementById('u-anote').value.trim(),
+      driveLink: document.getElementById('u-drivelink').value.trim(),
+      statusAfter: document.getElementById('u-status').value,
+      next: document.getElementById('u-next').value.trim()
+    };
+
+    const fileInput = document.getElementById('u-file');
+    const file = fileInput.files[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        showToast('File over 10MB — paste a Drive link instead');
+        btn.disabled = false; setSync('', 'Ready');
+        return;
+      }
+      params.fileData = await fileToBase64(file);
+      params.fileName = file.name;
+      params.aname = file.name;
+    } else {
+      params.aname = params.driveLink ? params.driveLink.split('/').pop() : '';
+    }
+
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: new URLSearchParams(params) });
+      const data = await res.json();
+      showToast('Update added to ' + tid);
+      ['u-date','u-time','u-desc','u-atype','u-anote','u-drivelink','u-next'].forEach(f => document.getElementById(f).value = '');
+      fileInput.value = '';
+      await loadTickets();
+      document.getElementById('u-ticket').value = tid;
+      renderSelectedTicketHint();
+    } catch (e) {
+      showToast('Save failed — check your connection');
+      setSync('error', 'Save failed');
+    }
+    btn.disabled = false;
+  }
+
+  function setSort(key) {
+    if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+    renderDash();
+  }
+
+  function statusClass(s) { return 'st-' + s.replace(/\s+/g, ''); }
+
+  function renderDash() {
+    document.querySelectorAll('.data thead .arrow').forEach(a => a.textContent = '');
+    const ar = document.getElementById('ar-' + sortKey);
+    if (ar) ar.textContent = sortDir === 1 ? '▲' : '▼';
+
+    const search = document.getElementById('f-search').value.toLowerCase();
+    const statusFilter = document.getElementById('f-status').value;
+    const now = new Date();
+
+    let openCount = 0, progressCount = 0, resolvedRecent = 0, closeDurations = [];
+    tickets.forEach(t => {
+      if (t.status === 'Open') openCount++;
+      if (t.status === 'In Progress') progressCount++;
+      if (t.status === 'Resolved') {
+        const lastUpdate = t.updates.length ? t.updates[t.updates.length-1].date : t.dateOpened;
+        const days = (now - new Date(t.dateOpened)) / 86400000;
+        if ((now - new Date(lastUpdate)) / 86400000 <= 30) resolvedRecent++;
+        closeDurations.push(days);
+      }
+    });
+    document.getElementById('s-open').textContent = openCount;
+    document.getElementById('s-progress').textContent = progressCount;
+    document.getElementById('s-resolved').textContent = resolvedRecent;
+    document.getElementById('s-avg').textContent = closeDurations.length
+      ? (closeDurations.reduce((a,b)=>a+b,0)/closeDurations.length).toFixed(1) : '—';
+
+    let filtered = tickets.filter(t => {
+      if (statusFilter && t.status !== statusFilter) return false;
+      if (search) {
+        const hay = (t.id+' '+t.odoo+' '+t.site+' '+t.desc+' '+t.source).toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      return true;
+    });
+    filtered.sort((a,b) => {
+      const av = (a[sortKey] || ''), bv = (b[sortKey] || '');
+      return av < bv ? -1 * sortDir : av > bv ? 1 * sortDir : 0;
+    });
+
+    const tbody = document.getElementById('ticket-tbody');
+    const emptyState = document.getElementById('empty-state');
+    if (!filtered.length) {
+      tbody.innerHTML = '';
+      emptyState.innerHTML = '<div class="empty">No tickets match — create one from "New Ticket" to start your record.</div>';
+      return;
+    }
+    emptyState.innerHTML = '';
+
+    tbody.innerHTML = filtered.map(t => {
+      const rowHtml = `
+        <tr onclick="toggleExpand('${t.id}')">
+          <td class="mono">${t.id}</td>
+          <td class="mono">${escapeHtml(t.odoo || '—')}</td>
+          <td class="site-cell">${escapeHtml(t.site)}</td>
+          <td>${escapeHtml(t.category)}</td>
+          <td>${escapeHtml(t.priority)}</td>
+          <td>${escapeHtml(t.dateOpened)}</td>
+          <td class="status-cell ${statusClass(t.status)}">${escapeHtml(t.status)}</td>
+        </tr>`;
+      if (expandedId !== t.id) return rowHtml;
+
+      const updatesHtml = t.updates.length ? t.updates.map(u => `
+        <div class="update-item">
+          <span class="u-date">${u.date}</span>
+          <p>${escapeHtml(u.desc)}</p>
+          <div class="u-meta">${u.time ? u.time + ' hrs · ' : ''}status → ${escapeHtml(u.statusAfter)}${u.next ? ' · next: ' + escapeHtml(u.next) : ''}</div>
+          ${u.atype ? `<span class="attach-tag">${escapeHtml(u.atype)}${u.aname ? ': ' + escapeHtml(u.aname) : ''}${u.aurl ? ` — <a href="${u.aurl}" target="_blank" onclick="event.stopPropagation()">open</a>` : ''}</span>` : ''}
+          ${u.anote ? `<div class="u-meta" style="margin-top:3px;">${escapeHtml(u.anote)}</div>` : ''}
+        </div>`).join('') : '<div class="update-item"><p style="color:var(--text-soft);">No updates logged yet.</p></div>';
+
+      return rowHtml + `
+        <tr class="detail-row"><td colspan="7"><div class="detail-inner">
+          <div style="font-size:13px; margin-bottom:8px;">${escapeHtml(t.desc)}${t.source ? ' · via ' + escapeHtml(t.source) : ''}</div>
+          ${updatesHtml}
+        </div></td></tr>`;
+    }).join('');
+  }
+
+  function toggleExpand(id) {
+    expandedId = expandedId === id ? null : id;
+    renderDash();
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str == null ? '' : String(str);
+    return d.innerHTML;
+  }
+
+  document.getElementById('n-date').value = todayStr();
+  document.getElementById('u-date').value = todayStr();
+  loadTickets();
+</script>
+</body>
+</html>
