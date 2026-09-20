@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Field Log — Ticket Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --sidebar-bg: #1B1B20;
+    --sidebar-icon: #93939E;
+    --sidebar-active-bg: #E9E5FB;
+    --sidebar-active-fg: #4B3F91;
+    --topbar-bg: #FFFFFF;
+    --page-bg: #F4F4F6;
+    --card-bg: #FFFFFF;
+    --line: #E6E6EA;
+    --text: #24242B;
+    --text-soft: #74747E;
+    --link-blue: #2F6FE4;
+    --primary: #443C8C;
+    --primary-hover: #362F70;
+    --outline-blue: #2F6FE4;
+    --status-open: #2F6FE4;
+    --status-progress: #6A4FC7;
+    --status-resolved: #1F9254;
+    --status-escalated: #D1483A;
+    --search-bg: #F0F0F3;
+    --shadow: 0 1px 2px rgba(20,20,30,0.05);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--page-bg); color: var(--text);
+    font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased; display: flex; min-height: 100vh;
+  }
+
+  /* ===== LOGIN ===== */
+  #login-screen {
+    position: fixed; inset: 0; background: var(--sidebar-bg);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .login-card {
+    background: #fff; border-radius: 14px; padding: 36px 34px; width: 100%; max-width: 360px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+  }
+  .login-card .logo {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: linear-gradient(155deg, var(--primary), #241F52);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; margin-bottom: 16px;
+  }
+  .login-card h1 { font-size: 18px; margin: 0 0 4px; }
+  .login-card p.sub2 { font-size: 12.5px; color: var(--text-soft); margin: 0 0 22px; }
+  .login-card .field { margin-bottom: 14px; }
+  .login-card label { display: block; font-size: 12px; font-weight: 600; color: var(--text-soft); margin-bottom: 6px; }
+  .login-card input {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+    font-family: inherit; font-size: 14px;
+  }
+  .login-card input:focus { outline: none; border-color: var(--primary); }
+  .login-card .btn { width: 100%; justify-content: center; margin-top: 4px; }
+  .login-error { color: var(--status-escalated); font-size: 12.5px; margin-top: 10px; display: none; }
+  #app { display: none; width: 100%; }
+  #app.show { display: flex; }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar { width: 64px; background: var(--sidebar-bg); flex-shrink: 0; display: flex; flex-direction: column; align-items: center; padding: 16px 0; gap: 6px; }
+  .sidebar .logo { width: 34px; height: 34px; border-radius: 8px; background: linear-gradient(155deg, var(--primary), #241F52); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; margin-bottom: 18px; }
+  .sidebar button { width: 42px; height: 42px; border: none; background: transparent; border-radius: 9px; color: var(--sidebar-icon); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s; }
+  .sidebar button svg { width: 20px; height: 20px; }
+  .sidebar button:hover { background: rgba(255,255,255,0.06); color: #fff; }
+  .sidebar button.active { background: var(--sidebar-active-bg); color: var(--sidebar-active-fg); }
+  .sidebar .logout { margin-top: auto; }
+
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .topbar { background: var(--topbar-bg); border-bottom: 1px solid var(--line); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .topbar .title-pill { background: var(--search-bg); border-radius: 8px; padding: 9px 16px; font-size: 13.5px; color: var(--text-soft); font-weight: 500; }
+  .topbar .title-pill b { color: var(--text); font-weight: 600; }
+  .sync { font-size: 12px; color: var(--text-soft); display: flex; align-items: center; gap: 6px; }
+  .sync .dot { width: 7px; height: 7px; border-radius: 50%; background: #1F9254; }
+  .sync.saving .dot { background: #D1A63A; }
+  .sync.error .dot { background: var(--status-escalated); }
+
+  .content { padding: 24px 28px 60px; max-width: 1040px; width: 100%; }
+  h1.page-title { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
+  p.page-sub { font-size: 13px; color: var(--text-soft); margin: 0 0 22px; }
+
+  .card { background: var(--card-bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 22px; margin-bottom: 16px; }
+  .card h2 { font-size: 14.5px; font-weight: 600; margin: 0 0 4px; }
+  .card .sub { font-size: 12.5px; color: var(--text-soft); margin: 0 0 18px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-soft); margin-bottom: 6px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .row2, .row3 { grid-template-columns: 1fr; } }
+
+  input, select, textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--text); font-family: inherit; font-size: 13.5px; transition: border-color .15s; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); }
+  textarea { resize: vertical; min-height: 56px; }
+  .mono { font-family: 'Inter', monospace; }
+
+  .btn { display: inline-flex; align-items: center; gap: 8px; background: var(--primary); color: #fff; border: none; padding: 10px 18px; border-radius: 8px; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background .15s; }
+  .btn:hover { background: var(--primary-hover); }
+  .btn.outline { background: #fff; color: var(--outline-blue); border: 1px solid var(--outline-blue); }
+  .btn.outline:hover { background: #F3F7FE; }
+  .btn.secondary { background: #F0F0F3; color: var(--text); }
+  .btn.secondary:hover { background: #E4E4E9; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .subblock { background: #FAFAFB; padding: 16px; border-radius: 8px; margin-bottom: 14px; border: 1px solid var(--line); }
+  .hidden { display: none !important; }
+  .hint { font-size: 11.5px; color: var(--text-soft); margin-top: 4px; }
+
+  /* Dashboard — cleaner redesign */
+  .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 16px; }
+  @media (max-width: 700px) { .stats { grid-template-columns: repeat(2,1fr); } }
+  .stat { background: var(--card-bg); border: 1px solid var(--line); border-radius: 10px; padding: 13px 14px; box-shadow: var(--shadow); }
+  .stat .num { font-size: 20px; font-weight: 700; }
+  .stat .lbl { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
+
+  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .toolbar input, .toolbar select { flex: 1; min-width: 150px; }
+
+  .tlist { display: flex; flex-direction: column; gap: 8px; }
+  .trow { background: var(--card-bg); border: 1px solid var(--line); border-left: 3px solid var(--status-open); border-radius: 8px; cursor: pointer; transition: box-shadow .15s; }
+  .trow:hover { box-shadow: 0 2px 8px rgba(20,20,30,0.07); }
+  .trow.st-Open { border-left-color: var(--status-open); }
+  .trow.st-InProgress { border-left-color: var(--status-progress); }
+  .trow.st-Resolved { border-left-color: var(--status-resolved); }
+  .trow.st-Escalated { border-left-color: var(--status-escalated); }
+  .trow-head { display: flex; align-items: center; gap: 12px; padding: 11px 14px; }
+  .trow-id { font-size: 11px; color: var(--text-soft); font-family: monospace; min-width: 62px; }
+  .trow-main { flex: 1; min-width: 0; }
+  .trow-title { font-size: 13.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trow-title .site { color: var(--link-blue); }
+  .trow-meta { font-size: 11.5px; color: var(--text-soft); margin-top: 1px; }
+  .trow-status { font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+  .trow-status.st-Open { color: var(--status-open); }
+  .trow-status.st-InProgress { color: var(--status-progress); }
+  .trow-status.st-Resolved { color: var(--status-resolved); }
+  .trow-status.st-Escalated { color: var(--status-escalated); }
+  .trow-body { display: none; padding: 0 14px 14px 88px; border-top: 1px solid var(--line); }
+  .trow.expanded .trow-body { display: block; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; font-size: 12.5px; margin: 12px 0; }
+  @media (max-width: 700px) { .detail-grid { grid-template-columns: 1fr; } }
+  .detail-grid .dk { color: var(--text-soft); }
+  .update-item { padding: 10px 0; border-top: 1px dashed var(--line); }
+  .update-item .u-date { font-weight: 700; font-size: 11.5px; color: var(--primary); }
+  .update-item p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; }
+  .update-item .u-meta { font-size: 11.5px; color: var(--text-soft); margin-top: 3px; }
+  .attach-tag { display: inline-block; margin-top: 5px; padding: 2px 8px; border-radius: 5px; background: #EEEAFB; color: var(--status-progress); font-size: 11px; }
+  .attach-tag a { color: inherit; }
+  .empty { text-align: center; padding: 36px 16px; color: var(--text-soft); font-size: 13px; }
+
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 50; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .setup-banner { background: #FBEAE8; border: 1px solid #F3CFC9; color: #8A3323; border-radius: 8px; padding: 14px 16px; font-size: 13px; margin-bottom: 18px; line-height: 1.5; }
+  .setup-banner code { background: #fff; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+  /* Reports */
+  .rtype-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .rtype-tabs button { padding: 8px 16px; border-radius: 7px; border: 1px solid var(--line); background: #fff; font-size: 13px; font-weight: 600; color: var(--text-soft); cursor: pointer; }
+  .rtype-tabs button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .day-group { margin-bottom: 18px; }
+  .day-heading { font-size: 13.5px; font-weight: 700; color: var(--primary); padding: 8px 0 6px; border-bottom: 2px solid var(--line); margin-bottom: 8px; }
+  .rentry { display: grid; grid-template-columns: 90px 1fr 90px; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .rentry:last-child { border-bottom: none; }
+  .rentry .rsite { font-weight: 600; color: var(--link-blue); }
+  .rentry .rdesc { color: var(--text); }
+  .rentry .rmeta { color: var(--text-soft); font-size: 11.5px; margin-top: 2px; }
+  .rentry .rhrs { text-align: right; color: var(--text-soft); }
+  .report-summary { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 18px; }
+  .report-summary .rs-item .num { font-size: 18px; font-weight: 700; }
+  .report-summary .rs-item .lbl { font-size: 11px; color: var(--text-soft); }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="logo">FL</div>
+    <h1>Field Log</h1>
+    <p class="sub2">Sign in to access your ticket record.</p>
+    <div class="field"><label>Email</label><input type="email" id="li-user" placeholder="you@idcubesystems.com" autocomplete="username"></div>
+    <div class="field" style="margin-bottom:6px;"><label>Password</label><input type="password" id="li-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()"></div>
+    <div class="login-error" id="li-error">Incorrect email or password.</div>
+    <button class="btn" style="margin-top:14px;" onclick="doLogin()">Sign in</button>
+  </div>
+</div>
+
+<div id="app">
+  <div class="sidebar">
+    <div class="logo">FL</div>
+    <button class="active" data-tab="new" title="New Ticket">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button data-tab="update" title="Log Update">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+    </button>
+    <button data-tab="dash" title="Dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+    </button>
+    <button data-tab="reports" title="Reports">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
+    </button>
+    <button class="logout" data-tab="logout" title="Log out">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>
+    </button>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="title-pill"><b>Field Log</b> — Ticket &amp; site visit record</div>
+      <div class="sync" id="sync"><span class="dot"></span><span id="sync-text">Ready</span></div>
+    </div>
+
+    <div class="content">
+      <div id="setup-banner" class="setup-banner" style="display:none;">
+        Backend not connected yet. Deploy <code>Code.gs</code> as an Apps Script Web App and paste the
+        <code>/exec</code> URL into <code>APPS_SCRIPT_URL</code> near the bottom of this file's script.
+      </div>
+
+      <!-- NEW TICKET -->
+      <section class="panel" id="panel-new">
+        <h1 class="page-title">New ticket</h1>
+        <p class="page-sub">Every escalated or self-identified issue starts here.</p>
+        <div class="card">
+          <div class="row2">
+            <div class="field"><label>Odoo ticket number</label><input type="text" id="n-odoo" class="mono" placeholder="e.g. ODO-48213"></div>
+            <div class="field"><label>Date opened</label><input type="date" id="n-date"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Ticket source</label><input type="text" id="n-source" placeholder="e.g. escalated by Rohit"></div>
+            <div class="field"><label>Site / client name</label><input type="text" id="n-site" placeholder="e.g. MMTC-PAMP"></div>
+          </div>
+          <div class="row3">
+            <div class="field"><label>Issue category</label>
+              <select id="n-category"><option>Access Control</option><option>Biometric</option><option>SQL Server</option><option>IIS / Web App</option><option>Network</option><option>Other</option></select>
+            </div>
+            <div class="field"><label>Priority</label>
+              <select id="n-priority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select>
+            </div>
+            <div class="field"><label>Ticket type</label>
+              <select id="n-type"><option>New Installation</option><option>Repair</option><option>Maintenance</option><option>Escalation</option><option>Client Query</option></select>
+            </div>
+          </div>
+          <div class="field"><label>Short description</label><textarea id="n-desc" placeholder="What's the issue?"></textarea></div>
+
+          <div class="subblock">
+            <h2 style="font-size:13px;">Handling info</h2>
+            <div class="row2">
+              <div class="field"><label>Assigned by</label><input type="text" id="n-assignedby" placeholder="who gave you this ticket"></div>
+              <div class="field"><label>Previously handled by</label><input type="text" id="n-prevhandler" placeholder="leave blank if none"></div>
+            </div>
+            <div class="row2">
+              <div class="field"><label>Site contact person</label><input type="text" id="n-sitecontact" placeholder="who you coordinate with on-site"></div>
+              <div class="field"><label>Device / model involved</label><input type="text" id="n-device" placeholder="e.g. HID Amico reader"></div>
+            </div>
+            <div class="field" style="margin-bottom:0;"><label>Issue faced / observations</label><textarea id="n-issueobs" placeholder="Complications, blockers, anything you noticed"></textarea></div>
+          </div>
+
+          <div class="row2">
+            <div class="field"><label>Status</label>
+              <select id="n-status" onchange="toggleEscalated('n')"><option>Open</option><option>In Progress</option><option>Resolved</option><option>Escalated</option></select>
+            </div>
+            <div class="field" id="n-escalated-wrap" style="display:none;"><label>Escalated to (department)</label><input type="text" id="n-escalated" placeholder="e.g. Product team"></div>
+          </div>
+          <div class="field"><label>Status remark</label><input type="text" id="n-statusremark" placeholder="why this status"></div>
+
+          <button class="btn" id="n-save" onclick="createTicket()">Save ticket</button>
+        </div>
+      </section>
+
+      <!-- LOG UPDATE -->
+      <section class="panel" id="panel-update" style="display:none;">
+        <h1 class="page-title">Log a daily update</h1>
+        <p class="page-sub">For multi-day tickets — one entry per visit or per day's work. Backdate freely if you're logging late.</p>
+        <div class="card">
+          <div class="field"><label>Select ticket</label>
+            <select id="u-ticket" onchange="renderSelectedTicketHint()"></select>
+            <div class="hint" id="u-hint"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Update date</label><input type="date" id="u-date"></div>
+            <div class="field"><label>Time spent (hrs)</label><input type="number" id="u-time" step="0.5" min="0" placeholder="e.g. 3"></div>
+          </div>
+          <div class="field"><label>What was done</label><textarea id="u-desc" placeholder="Diagnosis, actions, site visit notes..."></textarea></div>
+
+          <div class="subblock">
+            <h2 style="font-size:13px;">Patch / EXE / bug file (optional)</h2>
+            <p class="sub" style="margin-bottom:12px;">Small files upload straight to your Drive. For large installers, paste an existing Drive link instead.</p>
+            <div class="row2">
+              <div class="field"><label>Attachment type</label>
+                <select id="u-atype"><option value="">None</option><option>Patch</option><option>EXE</option><option>Config file</option><option>Bug report</option><option>Log file</option><option>Screenshot</option></select>
+              </div>
+              <div class="field"><label>Upload file (&lt;10MB)</label><input type="file" id="u-file"></div>
+            </div>
+            <div class="field"><label>...or paste Drive link</label><input type="text" id="u-drivelink" placeholder="https://drive.google.com/..."></div>
+            <div class="field" style="margin-bottom:0;"><label>Attachment note</label><input type="text" id="u-anote" placeholder="What it fixes / why it was applied"></div>
+          </div>
+
+          <div class="subblock">
+            <h2 style="font-size:13px;">Diagnosis &amp; confirmation</h2>
+            <div class="row2">
+              <div class="field"><label>Root cause</label><input type="text" id="u-rootcause" placeholder="if identified"></div>
+              <div class="field"><label>Client confirmation</label>
+                <select id="u-clientconf"><option value="">—</option><option>Yes</option><option>No</option><option>Pending</option></select>
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:0;"><label>Follow-up reminder date</label><input type="date" id="u-followup"></div>
+          </div>
+
+          <div class="row2">
+            <div class="field"><label>Status after this update</label>
+              <select id="u-status" onchange="toggleEscalated('u')"><option>Open</option><option>In Progress</option><option>Resolved</option><option>Escalated</option></select>
+            </div>
+            <div class="field" id="u-escalated-wrap" style="display:none;"><label>Escalated to (department)</label><input type="text" id="u-escalated" placeholder="e.g. Product team"></div>
+          </div>
+          <div class="field"><label>Status remark</label><input type="text" id="u-statusremark" placeholder="why this status"></div>
+          <div class="field"><label>Next step / follow-up</label><input type="text" id="u-next" placeholder="Leave blank if none"></div>
+
+          <button class="btn" id="u-save" onclick="addUpdate()">Save update</button>
+        </div>
+      </section>
+
+      <!-- DASHBOARD -->
+      <section class="panel" id="panel-dash" style="display:none;">
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-sub">Your ticket record — click any row to expand its full details and timeline.</p>
+
+        <div class="stats">
+          <div class="stat"><div class="num" id="s-open">0</div><div class="lbl">Open</div></div>
+          <div class="stat"><div class="num" id="s-progress">0</div><div class="lbl">In progress</div></div>
+          <div class="stat"><div class="num" id="s-resolved">0</div><div class="lbl">Resolved (30d)</div></div>
+          <div class="stat"><div class="num" id="s-avg">—</div><div class="lbl">Avg days to close</div></div>
+        </div>
+
+        <div class="toolbar">
+          <input type="text" id="f-search" placeholder="Search site, ticket ID, Odoo #, description..." oninput="renderDash()">
+          <select id="f-status" onchange="renderDash()"><option value="">All statuses</option><option>Open</option><option>In Progress</option><option>Resolved</option><option>Escalated</option></select>
+          <select id="f-sort" onchange="renderDash()">
+            <option value="dateOpened-desc">Newest first</option>
+            <option value="dateOpened-asc">Oldest first</option>
+            <option value="site-asc">Site A→Z</option>
+            <option value="priority-desc">Priority high→low</option>
+          </select>
+        </div>
+
+        <div class="tlist" id="ticket-list"></div>
+      </section>
+
+      <!-- REPORTS -->
+      <section class="panel" id="panel-reports" style="display:none;">
+        <h1 class="page-title">Reports</h1>
+        <p class="page-sub">Generate a clean work report to show HR or management — export as PDF or Excel.</p>
+
+        <div class="card">
+          <div class="rtype-tabs" id="rtype-tabs">
+            <button class="active" data-rtype="daily">Daily</button>
+            <button data-rtype="weekly">Weekly</button>
+            <button data-rtype="monthly">Monthly</button>
+            <button data-rtype="custom">Custom range</button>
+          </div>
+
+          <div id="r-daily" class="row2"><div class="field"><label>Date</label><input type="date" id="r-daily-date"></div></div>
+          <div id="r-weekly" class="row2 hidden"><div class="field"><label>Any date in the week</label><input type="date" id="r-weekly-date"></div></div>
+          <div id="r-monthly" class="row2 hidden"><div class="field"><label>Month</label><input type="month" id="r-monthly-date"></div></div>
+          <div id="r-custom" class="row2 hidden">
+            <div class="field"><label>From</label><input type="date" id="r-custom-from"></div>
+            <div class="field"><label>To</label><input type="date" id="r-custom-to"></div>
+          </div>
+
+          <div class="btn-row" style="margin-top: 6px;">
+            <button class="btn" onclick="buildReport()">Generate</button>
+            <button class="btn outline" onclick="exportReportPDF()">Export PDF</button>
+            <button class="btn outline" onclick="exportReportExcel()">Export Excel</button>
+          </div>
+        </div>
+
+        <div id="report-output"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  /* ====== CONFIGURE THIS ====== */
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwO9rWDz74q68oYEdEhTq6rpNOvGlBE9SEBITIRSmqKSx_w42KDaydUzqyQPnAXSegTeA/exec';
+  /* ====== HARDCODED LOGIN — front-end only, stops casual/shoulder access, not real security ====== */
+  const LOGIN_USER = 'shivam@idcubesystems.com';
+  const LOGIN_PASS = 'Shivam@123';
+  /* ============================= */
+
+  const CACHE_KEY = 'field_log_cache_v2';
+  const AUTH_KEY = 'field_log_auth_v1';
+  let tickets = [];
+  let reportEntries = [];
+  let reportType = 'daily';
+
+  // ---------- LOGIN ----------
+  function doLogin() {
+    const u = document.getElementById('li-user').value.trim().toLowerCase();
+    const p = document.getElementById('li-pass').value;
+    if (u === LOGIN_USER.toLowerCase() && p === LOGIN_PASS) {
+      sessionStorage.setItem(AUTH_KEY, '1');
+      enterApp();
+    } else {
+      document.getElementById('li-error').style.display = 'block';
+    }
+  }
+  function enterApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').classList.add('show');
+    loadTickets();
+  }
+  function doLogout() {
+    sessionStorage.removeItem(AUTH_KEY);
+    location.reload();
+  }
+  if (sessionStorage.getItem(AUTH_KEY) === '1') { enterApp(); }
+
+  // ---------- HELPERS ----------
+  function todayStr() {
+    const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const y = ist.getFullYear(), m = String(ist.getMonth()+1).padStart(2,'0'), d = String(ist.getDate()).padStart(2,'0');
+    return y + '-' + m + '-' + d;
+  }
+  function setSync(state, text) {
+    document.getElementById('sync').className = 'sync' + (state ? ' ' + state : '');
+    document.getElementById('sync-text').textContent = text;
+  }
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str == null ? '' : String(str);
+    return d.innerHTML;
+  }
+  function toggleEscalated(prefix) {
+    const status = document.getElementById(prefix + '-status').value;
+    document.getElementById(prefix + '-escalated-wrap').style.display = (status === 'Escalated') ? 'block' : 'none';
+  }
+
+  function checkConfigured() {
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_YOUR') === 0) {
+      document.getElementById('setup-banner').style.display = 'block';
+      setSync('error', 'Not connected');
+      try { tickets = JSON.parse(localStorage.getItem(CACHE_KEY)) || []; } catch(e) { tickets = []; }
+      renderDash(); populateTicketSelect();
+      return false;
+    }
+    return true;
+  }
+
+  async function loadTickets() {
+    if (!checkConfigured()) return;
+    setSync('saving', 'Syncing...');
+    try {
+      const res = await fetch(APPS_SCRIPT_URL + '?action=list');
+      const data = await res.json();
+      tickets = data.tickets || [];
+      localStorage.setItem(CACHE_KEY, JSON.stringify(tickets));
+      setSync('', 'Synced');
+    } catch (e) {
+      setSync('error', 'Offline — showing cache');
+      try { tickets = JSON.parse(localStorage.getItem(CACHE_KEY)) || []; } catch(e2) { tickets = []; }
+    }
+    renderDash();
+    populateTicketSelect();
+  }
+
+  // ---------- TABS ----------
+  document.querySelectorAll('.sidebar button[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.tab === 'logout') { doLogout(); return; }
+      document.querySelectorAll('.sidebar button[data-tab]').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+      btn.classList.add('active');
+      document.getElementById('panel-' + btn.dataset.tab).style.display = 'block';
+      if (btn.dataset.tab === 'update') populateTicketSelect();
+      if (btn.dataset.tab === 'dash') renderDash();
+    });
+  });
+
+  // ---------- NEW TICKET ----------
+  async function createTicket() {
+    if (!checkConfigured()) { showToast('Connect the backend first — see banner above'); return; }
+    const site = document.getElementById('n-site').value.trim();
+    const desc = document.getElementById('n-desc').value.trim();
+    if (!site || !desc) { showToast('Site and description are required'); return; }
+
+    const body = new URLSearchParams({
+      action: 'createTicket',
+      odoo: document.getElementById('n-odoo').value.trim(),
+      dateOpened: document.getElementById('n-date').value || todayStr(),
+      source: document.getElementById('n-source').value.trim(),
+      site, category: document.getElementById('n-category').value,
+      priority: document.getElementById('n-priority').value,
+      ticketType: document.getElementById('n-type').value,
+      desc, status: document.getElementById('n-status').value,
+      statusRemark: document.getElementById('n-statusremark').value.trim(),
+      escalatedDept: document.getElementById('n-escalated').value.trim(),
+      assignedBy: document.getElementById('n-assignedby').value.trim(),
+      previousHandler: document.getElementById('n-prevhandler').value.trim(),
+      siteContact: document.getElementById('n-sitecontact').value.trim(),
+      deviceModel: document.getElementById('n-device').value.trim(),
+      issueObserved: document.getElementById('n-issueobs').value.trim()
+    });
+
+    const btn = document.getElementById('n-save');
+    btn.disabled = true; setSync('saving', 'Saving...');
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body });
+      const data = await res.json();
+      showToast((data.id || 'Ticket') + ' saved');
+      ['n-odoo','n-source','n-site','n-desc','n-statusremark','n-escalated','n-assignedby','n-prevhandler','n-sitecontact','n-device','n-issueobs']
+        .forEach(f => document.getElementById(f).value = '');
+      document.getElementById('n-date').value = '';
+      document.getElementById('n-status').value = 'Open';
+      toggleEscalated('n');
+      await loadTickets();
+    } catch (e) {
+      showToast('Save failed — check your connection');
+      setSync('error', 'Save failed');
+    }
+    btn.disabled = false;
+  }
+
+  // ---------- LOG UPDATE ----------
+  function populateTicketSelect() {
+    const sel = document.getElementById('u-ticket');
+    sel.innerHTML = '';
+    if (!tickets.length) { sel.innerHTML = '<option value="">No tickets yet — create one first</option>'; return; }
+    tickets.slice().sort((a,b) => (a.id < b.id ? 1 : -1)).forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      const short = t.desc && t.desc.length > 40 ? t.desc.slice(0,40) + '…' : t.desc;
+      opt.textContent = t.id + ' — ' + t.site + ' — ' + short + ' [' + t.status + ']';
+      sel.appendChild(opt);
+    });
+    renderSelectedTicketHint();
+  }
+  function renderSelectedTicketHint() {
+    const sel = document.getElementById('u-ticket');
+    const t = tickets.find(x => x.id === sel.value);
+    document.getElementById('u-hint').textContent = t ? (t.updates.length + ' update(s) logged · opened ' + t.dateOpened) : '';
+  }
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function addUpdate() {
+    if (!checkConfigured()) { showToast('Connect the backend first — see banner above'); return; }
+    const tid = document.getElementById('u-ticket').value;
+    const t = tickets.find(x => x.id === tid);
+    if (!t) { showToast('Select a ticket first'); return; }
+    const desc = document.getElementById('u-desc').value.trim();
+    if (!desc) { showToast('Describe what was done'); return; }
+
+    const btn = document.getElementById('u-save');
+    btn.disabled = true; setSync('saving', 'Saving...');
+
+    const params = {
+      action: 'addUpdate', ticketId: tid, site: t.site,
+      date: document.getElementById('u-date').value || todayStr(),
+      time: document.getElementById('u-time').value,
+      desc, atype: document.getElementById('u-atype').value,
+      anote: document.getElementById('u-anote').value.trim(),
+      driveLink: document.getElementById('u-drivelink').value.trim(),
+      rootCause: document.getElementById('u-rootcause').value.trim(),
+      clientConfirmation: document.getElementById('u-clientconf').value,
+      followUpDate: document.getElementById('u-followup').value,
+      statusAfter: document.getElementById('u-status').value,
+      statusRemark: document.getElementById('u-statusremark').value.trim(),
+      escalatedDept: document.getElementById('u-escalated').value.trim(),
+      next: document.getElementById('u-next').value.trim()
+    };
+
+    const fileInput = document.getElementById('u-file');
+    const file = fileInput.files[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        showToast('File over 10MB — paste a Drive link instead');
+        btn.disabled = false; setSync('', 'Ready');
+        return;
+      }
+      params.fileData = await fileToBase64(file);
+      params.fileName = file.name;
+      params.aname = file.name;
+    } else {
+      params.aname = params.driveLink ? params.driveLink.split('/').pop() : '';
+    }
+
+    try {
+      await fetch(APPS_SCRIPT_URL, { method: 'POST', body: new URLSearchParams(params) });
+      showToast('Update added to ' + tid);
+      ['u-date','u-time','u-desc','u-atype','u-anote','u-drivelink','u-rootcause','u-followup','u-statusremark','u-escalated','u-next']
+        .forEach(f => document.getElementById(f).value = '');
+      document.getElementById('u-clientconf').value = '';
+      fileInput.value = '';
+      toggleEscalated('u');
+      await loadTickets();
+      document.getElementById('u-ticket').value = tid;
+      renderSelectedTicketHint();
+    } catch (e) {
+      showToast('Save failed — check your connection');
+      setSync('error', 'Save failed');
+    }
+    btn.disabled = false;
+  }
+
+  // ---------- DASHBOARD ----------
+  function statusClass(s) { return 'st-' + s.replace(/\s+/g, ''); }
+
+  function renderDash() {
+    const search = document.getElementById('f-search').value.toLowerCase();
+    const statusFilter = document.getElementById('f-status').value;
+    const sortVal = document.getElementById('f-sort').value;
+    const now = new Date();
+
+    let openCount = 0, progressCount = 0, resolvedRecent = 0, closeDurations = [];
+    tickets.forEach(t => {
+      if (t.status === 'Open') openCount++;
+      if (t.status === 'In Progress') progressCount++;
+      if (t.status === 'Resolved') {
+        const lastUpdate = t.updates.length ? t.updates[t.updates.length-1].date : t.dateOpened;
+        const days = (now - new Date(t.dateOpened)) / 86400000;
+        if ((now - new Date(lastUpdate)) / 86400000 <= 30) resolvedRecent++;
+        closeDurations.push(days);
+      }
+    });
+    document.getElementById('s-open').textContent = openCount;
+    document.getElementById('s-progress').textContent = progressCount;
+    document.getElementById('s-resolved').textContent = resolvedRecent;
+    document.getElementById('s-avg').textContent = closeDurations.length
+      ? (closeDurations.reduce((a,b)=>a+b,0)/closeDurations.length).toFixed(1) : '—';
+
+    let filtered = tickets.filter(t => {
+      if (statusFilter && t.status !== statusFilter) return false;
+      if (search) {
+        const hay = (t.id+' '+t.odoo+' '+t.site+' '+t.desc+' '+t.source).toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      return true;
+    });
+
+    const priorityRank = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+    const [sortKey, sortDir] = sortVal.split('-');
+    filtered.sort((a,b) => {
+      let av = a[sortKey], bv = b[sortKey];
+      if (sortKey === 'priority') { av = priorityRank[av]||0; bv = priorityRank[bv]||0; }
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    const list = document.getElementById('ticket-list');
+    if (!filtered.length) {
+      list.innerHTML = '<div class="empty">No tickets match — create one from "New Ticket" to start your record.</div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(t => {
+      const updatesHtml = t.updates.length ? t.updates.map(u => `
+        <div class="update-item">
+          <span class="u-date">${u.date}</span>
+          <p>${escapeHtml(u.desc)}</p>
+          <div class="u-meta">${u.time ? u.time + ' hrs · ' : ''}status → ${escapeHtml(u.statusAfter)}${u.statusRemark ? ' (' + escapeHtml(u.statusRemark) + ')' : ''}${u.next ? ' · next: ' + escapeHtml(u.next) : ''}</div>
+          ${u.rootCause ? `<div class="u-meta">Root cause: ${escapeHtml(u.rootCause)}</div>` : ''}
+          ${u.clientConfirmation ? `<div class="u-meta">Client confirmed: ${escapeHtml(u.clientConfirmation)}</div>` : ''}
+          ${u.escalatedDept ? `<div class="u-meta">Escalated to: ${escapeHtml(u.escalatedDept)}</div>` : ''}
+          ${u.followUpDate ? `<div class="u-meta">Follow-up: ${escapeHtml(u.followUpDate)}</div>` : ''}
+          ${u.atype ? `<span class="attach-tag">${escapeHtml(u.atype)}${u.aname ? ': ' + escapeHtml(u.aname) : ''}${u.aurl ? ` — <a href="${u.aurl}" target="_blank" onclick="event.stopPropagation()">open</a>` : ''}</span>` : ''}
+        </div>`).join('') : '<div class="update-item"><p style="color:var(--text-soft);">No updates logged yet.</p></div>';
+
+      return `
+        <div class="trow ${statusClass(t.status)}" onclick="this.classList.toggle('expanded')">
+          <div class="trow-head">
+            <div class="trow-id">${t.id}</div>
+            <div class="trow-main">
+              <div class="trow-title"><span class="site">${escapeHtml(t.site)}</span> — ${escapeHtml(t.desc.length > 55 ? t.desc.slice(0,55)+'…' : t.desc)}</div>
+              <div class="trow-meta">${escapeHtml(t.category)} · ${escapeHtml(t.priority)} · opened ${t.dateOpened}${t.odoo ? ' · Odoo ' + escapeHtml(t.odoo) : ''}</div>
+            </div>
+            <div class="trow-status ${statusClass(t.status)}">${escapeHtml(t.status)}</div>
+          </div>
+          <div class="trow-body">
+            <div class="detail-grid">
+              <div><span class="dk">Ticket type:</span> ${escapeHtml(t.ticketType || '—')}</div>
+              <div><span class="dk">Assigned by:</span> ${escapeHtml(t.assignedBy || '—')}</div>
+              <div><span class="dk">Previously handled by:</span> ${escapeHtml(t.previousHandler || '—')}</div>
+              <div><span class="dk">Site contact:</span> ${escapeHtml(t.siteContact || '—')}</div>
+              <div><span class="dk">Device / model:</span> ${escapeHtml(t.deviceModel || '—')}</div>
+              <div><span class="dk">Source:</span> ${escapeHtml(t.source || '—')}</div>
+              ${t.escalatedDept ? `<div><span class="dk">Escalated to:</span> ${escapeHtml(t.escalatedDept)}</div>` : ''}
+              ${t.statusRemark ? `<div><span class="dk">Status remark:</span> ${escapeHtml(t.statusRemark)}</div>` : ''}
+            </div>
+            ${t.issueObserved ? `<div style="font-size:12.5px; margin-bottom:8px;"><span class="dk">Observations:</span> ${escapeHtml(t.issueObserved)}</div>` : ''}
+            ${updatesHtml}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ---------- REPORTS ----------
+  document.querySelectorAll('#rtype-tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#rtype-tabs button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      reportType = btn.dataset.rtype;
+      ['daily','weekly','monthly','custom'].forEach(t => document.getElementById('r-'+t).classList.toggle('hidden', t !== reportType));
+    });
+  });
+
+  function dayName(dateStr) {
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', timeZone: 'Asia/Kolkata' });
+  }
+  function fmtDisplay(dateStr) {
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+  }
+
+  function getRange() {
+    if (reportType === 'daily') {
+      const d = document.getElementById('r-daily-date').value || todayStr();
+      return { from: d, to: d };
+    }
+    if (reportType === 'weekly') {
+      const d = new Date((document.getElementById('r-weekly-date').value || todayStr()) + 'T00:00:00');
+      const day = d.getDay(); // 0=Sun
+      const diffToMon = (day === 0 ? -6 : 1 - day);
+      const mon = new Date(d); mon.setDate(d.getDate() + diffToMon);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      const f = x => x.toISOString().slice(0,10);
+      return { from: f(mon), to: f(sun) };
+    }
+    if (reportType === 'monthly') {
+      const v = document.getElementById('r-monthly-date').value || todayStr().slice(0,7);
+      const [y,m] = v.split('-').map(Number);
+      const last = new Date(y, m, 0).getDate();
+      return { from: v + '-01', to: v + '-' + String(last).padStart(2,'0') };
+    }
+    return {
+      from: document.getElementById('r-custom-from').value || todayStr(),
+      to: document.getElementById('r-custom-to').value || todayStr()
+    };
+  }
+
+  function buildEntries(from, to) {
+    const entries = [];
+    tickets.forEach(t => {
+      if (t.dateOpened >= from && t.dateOpened <= to) {
+        entries.push({ date: t.dateOpened, site: t.site, ticketId: t.id, odoo: t.odoo, desc: 'Ticket opened: ' + t.desc, assignedBy: t.assignedBy, status: t.status, remark: t.statusRemark, hrs: '' });
+      }
+      t.updates.forEach(u => {
+        if (u.date >= from && u.date <= to) {
+          entries.push({ date: u.date, site: t.site, ticketId: t.id, odoo: t.odoo, desc: u.desc, assignedBy: t.assignedBy, status: u.statusAfter, remark: u.statusRemark, hrs: u.time || '' });
+        }
+      });
+    });
+    entries.sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    return entries;
+  }
+
+  function buildReport() {
+    const { from, to } = getRange();
+    reportEntries = buildEntries(from, to);
+    const out = document.getElementById('report-output');
+
+    if (!reportEntries.length) {
+      out.innerHTML = '<div class="card"><div class="empty">No entries in this period.</div></div>';
+      return;
+    }
+
+    const totalHrs = reportEntries.reduce((s,e) => s + (parseFloat(e.hrs)||0), 0);
+    const sites = new Set(reportEntries.map(e => e.site)).size;
+
+    const groups = {};
+    reportEntries.forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
+
+    let html = `<div class="card">
+      <div class="report-summary">
+        <div class="rs-item"><div class="num">${reportEntries.length}</div><div class="lbl">Entries</div></div>
+        <div class="rs-item"><div class="num">${totalHrs.toFixed(1)}</div><div class="lbl">Total hours</div></div>
+        <div class="rs-item"><div class="num">${sites}</div><div class="lbl">Sites</div></div>
+        <div class="rs-item"><div class="num" style="font-size:13px;">${fmtDisplay(from)} – ${fmtDisplay(to)}</div><div class="lbl">Period</div></div>
+      </div>`;
+
+    Object.keys(groups).sort().forEach(date => {
+      html += `<div class="day-group"><div class="day-heading">${dayName(date)}, ${fmtDisplay(date)}</div>`;
+      groups[date].forEach(e => {
+        html += `<div class="rentry">
+          <div class="rsite">${escapeHtml(e.site)}</div>
+          <div><div class="rdesc">${escapeHtml(e.desc)}</div><div class="rmeta">${e.ticketId}${e.odoo ? ' · Odoo ' + escapeHtml(e.odoo) : ''} · ${escapeHtml(e.status)}${e.assignedBy ? ' · assigned by ' + escapeHtml(e.assignedBy) : ''}${e.remark ? ' · ' + escapeHtml(e.remark) : ''}</div></div>
+          <div class="rhrs">${e.hrs ? e.hrs + ' hrs' : ''}</div>
+        </div>`;
+      });
+      html += `</div>`;
+    });
+    html += `</div>`;
+    out.innerHTML = html;
+  }
+
+  function exportReportPDF() {
+    if (!reportEntries.length) { showToast('Click Generate first'); return; }
+    const { from, to } = getRange();
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.setFontSize(14); doc.text('Field Log — Work Report', 14, 16);
+    doc.setFontSize(10);
+    doc.text('Shivam — Senior System Engineer, IDCUBE Identification Systems', 14, 23);
+    doc.text('Period: ' + fmtDisplay(from) + ' – ' + fmtDisplay(to) + '   |   Generated: ' + fmtDisplay(todayStr()), 14, 29);
+
+    const totalHrs = reportEntries.reduce((s,e) => s + (parseFloat(e.hrs)||0), 0);
+    const sites = new Set(reportEntries.map(e => e.site)).size;
+    doc.text('Total entries: ' + reportEntries.length + '   |   Total hours: ' + totalHrs.toFixed(1) + '   |   Sites: ' + sites, 14, 35);
+
+    const groups = {};
+    reportEntries.forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
+    let y = 42;
+    Object.keys(groups).sort().forEach(date => {
+      doc.setFontSize(11); doc.setTextColor(68,60,140);
+      doc.text(dayName(date) + ', ' + fmtDisplay(date), 14, y);
+      doc.setTextColor(0,0,0);
+      const rows = groups[date].map(e => [e.site, e.desc, e.ticketId + (e.odoo ? ' / ' + e.odoo : ''), e.assignedBy || '', e.status, e.hrs || '']);
+      doc.autoTable({
+        startY: y + 3, head: [['Site','Description','Ticket','Assigned by','Status','Hrs']],
+        body: rows, styles: { fontSize: 8.5, cellPadding: 2.5 }, headStyles: { fillColor: [68,60,140] },
+        margin: { left: 14, right: 14 }
+      });
+      y = doc.lastAutoTable.finalY + 10;
+      if (y > 260) { doc.addPage(); y = 20; }
+    });
+
+    doc.setFontSize(10);
+    doc.text('Total hours for period: ' + totalHrs.toFixed(1), 14, y);
+    y += 18;
+    doc.text('_______________________', 14, y);
+    doc.text('Reviewed by', 14, y + 5);
+
+    doc.save('FieldLog_Report_' + from + '_to_' + to + '.pdf');
+  }
+
+  function exportReportExcel() {
+    if (!reportEntries.length) { showToast('Click Generate first'); return; }
+    const { from, to } = getRange();
+    const totalHrs = reportEntries.reduce((s,e) => s + (parseFloat(e.hrs)||0), 0);
+    const sites = new Set(reportEntries.map(e => e.site)).size;
+
+    const aoa = [
+      ['Field Log — Work Report'],
+      ['Shivam — Senior System Engineer, IDCUBE Identification Systems'],
+      ['Period', fmtDisplay(from) + ' – ' + fmtDisplay(to)],
+      ['Generated', fmtDisplay(todayStr())],
+      ['Total entries', reportEntries.length, 'Total hours', totalHrs.toFixed(1), 'Sites', sites],
+      [],
+      ['Date','Day','Site','Ticket ID','Odoo #','Description','Assigned By','Status','Remark','Hours']
+    ];
+    reportEntries.forEach(e => {
+      aoa.push([e.date, dayName(e.date), e.site, e.ticketId, e.odoo||'', e.desc, e.assignedBy||'', e.status, e.remark||'', e.hrs||'']);
+    });
+    aoa.push([]);
+    aoa.push(['', '', '', '', '', '', '', '', 'Grand total', totalHrs.toFixed(1)]);
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:12},{wch:11},{wch:16},{wch:10},{wch:12},{wch:40},{wch:16},{wch:12},{wch:24},{wch:8}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Report');
+    XLSX.writeFile(wb, 'FieldLog_Report_' + from + '_to_' + to + '.xlsx');
+  }
+
+  // ---------- INIT ----------
+  document.getElementById('n-date').value = todayStr();
+  document.getElementById('u-date').value = todayStr();
+  document.getElementById('r-daily-date').value = todayStr();
+  document.getElementById('r-weekly-date').value = todayStr();
+  document.getElementById('r-monthly-date').value = todayStr().slice(0,7);
+</script>
+</body>
+</html>
